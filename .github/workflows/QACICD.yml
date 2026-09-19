@@ -273,6 +273,7 @@ jobs:
 
   client-lint:
     name: Client Lint
+
     needs:
       - client-trivy-fs
       - checkov_kubernetes
@@ -311,6 +312,7 @@ jobs:
 
   server-lint:
     name: Server Lint
+
     needs:
       - server-trivy-fs
       - checkov_kubernetes
@@ -341,3 +343,73 @@ jobs:
       - name: Run lint
         continue-on-error: true
         run: npm run lint --if-present
+
+
+  # ============================================================
+  # STAGE 5 — CLIENT UNIT TEST
+  # ============================================================
+
+  client-test:
+    name: Client Unit Test
+
+    needs: client-lint
+
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        continue-on-error: true
+        run: npm test --if-present
+
+
+  # ============================================================
+  # STAGE 5 — SERVER UNIT TEST
+  # ============================================================
+
+  server-test:
+    name: Server Unit Test
+
+    needs: server-lint
+
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        continue-on-error: true
+        run: npm test --if-present
