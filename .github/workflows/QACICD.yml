@@ -413,3 +413,62 @@ jobs:
       - name: Run unit tests
         continue-on-error: true
         run: npm test --if-present
+
+
+  # ============================================================
+  # STAGE 6 — SONARQUBE ANALYSIS & QUALITY GATE
+  # ============================================================
+
+  sonarqube:
+    name: SonarQube Analysis and Quality Gate Check
+
+    needs:
+      - client-test
+      - server-test
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ----------------------------------------------------------
+      # CHECKOUT WITH COMPLETE GIT HISTORY
+      # ----------------------------------------------------------
+
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+
+      # ----------------------------------------------------------
+      # SONARQUBE CODE ANALYSIS
+      # ----------------------------------------------------------
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+
+      # ----------------------------------------------------------
+      # SONARQUBE QUALITY GATE
+      # ----------------------------------------------------------
+
+      - name: SonarQube Quality Gate check
+        id: sonarqube-quality-gate-check
+        uses: SonarSource/sonarqube-quality-gate-action@master
+        with:
+          pollingTimeoutSec: 600
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+
+      # ----------------------------------------------------------
+      # DISPLAY QUALITY GATE STATUS
+      # ----------------------------------------------------------
+
+      - name: Show SonarQube Quality Gate Status
+        run: |
+          echo "SonarQube Quality Gate Status: ${{ steps.sonarqube-quality-gate-check.outputs.quality-gate-status }}"
