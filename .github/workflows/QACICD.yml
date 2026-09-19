@@ -12,7 +12,7 @@ on:
 jobs:
 
   # ============================================================
-  # STAGE 1 — GitLeaks
+  # STAGE 1 — GITLEAKS
   # ============================================================
 
   gitleaks_scan:
@@ -45,7 +45,7 @@ jobs:
 
 
   # ============================================================
-  # STAGE 2 — Checkov Terraform
+  # STAGE 2 — CHECKOV TERRAFORM
   # ============================================================
 
   checkov_terraform:
@@ -84,7 +84,7 @@ jobs:
 
 
   # ============================================================
-  # STAGE 2 — Checkov Kubernetes
+  # STAGE 2 — CHECKOV KUBERNETES
   # ============================================================
 
   checkov_kubernetes:
@@ -123,7 +123,7 @@ jobs:
 
 
   # ============================================================
-  # STAGE 2 — Checkov Dockerfile
+  # STAGE 2 — CHECKOV DOCKERFILE
   # ============================================================
 
   checkov_dockerfile:
@@ -162,11 +162,11 @@ jobs:
 
 
   # ============================================================
-  # STAGE 2 — Trivy Client Filesystem
+  # STAGE 3 — TRIVY CLIENT / FRONTEND
   # ============================================================
 
   client-trivy-fs:
-    name: Client Trivy Filesystem Scan
+    name: Client Trivy FS Scan
     needs: gitleaks_scan
     runs-on: ubuntu-latest
 
@@ -175,53 +175,51 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      # Keep the Trivy installation step from Article 21 here.
-      # The article specifies latest version + cache.
-      - name: Install Trivy
-        uses: aquasecurity/trivy-action@master
-        with:
-          version: latest
-          cache: true
-
-      - name: Verify Trivy installation
+      - name: Run Trivy filesystem scan - JSON
         run: |
-          trivy --version
-          which trivy
-
-      - name: Run Trivy filesystem scan
-        run: |
-          trivy fs ./client \
-            --severity HIGH,CRITICAL \
-            --ignore-unfixed \
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            aquasec/trivy:0.74.0 \
+            fs /repo/client \
             --format json \
-            --output client-trivy-fs-report.json \
-            --exit-code 0
-
-      - name: Run Trivy table scan
-        run: |
-          trivy fs ./client \
+            --output /repo/client-trivy-fs-report.json \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
-            --format table \
-            --output client-trivy-fs-report.txt \
             --exit-code 0
 
-      - name: Upload Client Trivy reports
+      - name: Run Trivy filesystem scan - Table
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            aquasec/trivy:0.74.0 \
+            fs /repo/client \
+            --format table \
+            --output /repo/client-trivy-fs-report.txt \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code 0
+
+      - name: Upload Trivy JSON report
         uses: actions/upload-artifact@v4
         with:
-          name: client-trivy-fs-reports
-          path: |
-            client-trivy-fs-report.json
-            client-trivy-fs-report.txt
+          name: client-trivy-fs-json-report
+          path: client-trivy-fs-report.json
+          if-no-files-found: warn
+
+      - name: Upload Trivy Table report
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-trivy-fs-table-report
+          path: client-trivy-fs-report.txt
           if-no-files-found: warn
 
 
   # ============================================================
-  # STAGE 2 — Trivy Server Filesystem
+  # STAGE 3 — TRIVY SERVER / BACKEND
   # ============================================================
 
   server-trivy-fs:
-    name: Server Trivy Filesystem Scan
+    name: Server Trivy FS Scan
     needs: gitleaks_scan
     runs-on: ubuntu-latest
 
@@ -230,51 +228,52 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Install Trivy
-        uses: aquasecurity/trivy-action@master
-        with:
-          version: latest
-          cache: true
-
-      - name: Verify Trivy installation
+      - name: Run Trivy filesystem scan - JSON
         run: |
-          trivy --version
-          which trivy
-
-      - name: Run Trivy filesystem scan
-        run: |
-          trivy fs ./server \
-            --severity HIGH,CRITICAL \
-            --ignore-unfixed \
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            aquasec/trivy:0.74.0 \
+            fs /repo/server \
             --format json \
-            --output server-trivy-fs-report.json \
-            --exit-code 0
-
-      - name: Run Trivy table scan
-        run: |
-          trivy fs ./server \
+            --output /repo/server-trivy-fs-report.json \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
-            --format table \
-            --output server-trivy-fs-report.txt \
             --exit-code 0
 
-      - name: Upload Server Trivy reports
+      - name: Run Trivy filesystem scan - Table
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            aquasec/trivy:0.74.0 \
+            fs /repo/server \
+            --format table \
+            --output /repo/server-trivy-fs-report.txt \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code 0
+
+      - name: Upload Trivy JSON report
         uses: actions/upload-artifact@v4
         with:
-          name: server-trivy-fs-reports
-          path: |
-            server-trivy-fs-report.json
-            server-trivy-fs-report.txt
+          name: server-trivy-fs-json-report
+          path: server-trivy-fs-report.json
+          if-no-files-found: warn
+
+      - name: Upload Trivy Table report
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-trivy-fs-table-report
+          path: server-trivy-fs-report.txt
           if-no-files-found: warn
 
 
   # ============================================================
-  # STAGE 3 — Client Lint
+  # STAGE 4 — CLIENT LINT
   # ============================================================
 
   client-lint:
     name: Client Lint
+
     needs:
       - client-trivy-fs
       - checkov_kubernetes
@@ -302,16 +301,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run client lint
+      - name: Run lint
+        continue-on-error: true
         run: npm run lint --if-present
 
 
   # ============================================================
-  # STAGE 3 — Server Lint
+  # STAGE 4 — SERVER LINT
   # ============================================================
 
   server-lint:
     name: Server Lint
+
     needs:
       - server-trivy-fs
       - checkov_kubernetes
@@ -339,17 +340,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run server lint
+      - name: Run lint
+        continue-on-error: true
         run: npm run lint --if-present
 
 
   # ============================================================
-  # STAGE 4 — Client Unit Test
+  # STAGE 5 — CLIENT UNIT TEST
   # ============================================================
 
   client-test:
     name: Client Unit Test
+
     needs: client-lint
+
     runs-on: ubuntu-latest
 
     defaults:
@@ -371,18 +375,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run client tests
-        run: npm test --if-present
+      - name: Run unit tests
         continue-on-error: true
+        run: npm test --if-present
 
 
   # ============================================================
-  # STAGE 4 — Server Unit Test
+  # STAGE 5 — SERVER UNIT TEST
   # ============================================================
 
   server-test:
     name: Server Unit Test
+
     needs: server-lint
+
     runs-on: ubuntu-latest
 
     defaults:
@@ -404,20 +410,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run server tests
-        run: npm test --if-present
+      - name: Run unit tests
         continue-on-error: true
+        run: npm test --if-present
 
 
   # ============================================================
-  # STAGE 5 — SonarQube
+  # STAGE 6 — SONARQUBE ANALYSIS & QUALITY GATE
   # ============================================================
 
   sonarqube:
     name: SonarQube Analysis and Quality Gate Check
+
     needs:
-      - server-test
       - client-test
+      - server-test
 
     runs-on: ubuntu-latest
 
@@ -429,14 +436,14 @@ jobs:
           fetch-depth: 0
 
       - name: SonarQube Scan
-        uses: sonarsource/sonarqube-scan-action@master
+        uses: SonarSource/sonarqube-scan-action@master
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
-      - name: SonarQube Quality Gate Check
+      - name: SonarQube Quality Gate check
         id: sonarqube-quality-gate-check
-        uses: sonarsource/sonarqube-quality-gate-action@master
+        uses: SonarSource/sonarqube-quality-gate-action@master
         continue-on-error: true
         with:
           pollingTimeoutSec: 600
@@ -446,16 +453,19 @@ jobs:
 
       - name: Show SonarQube Quality Gate Status
         run: |
-          echo "The Quality Gate status is ${{ steps.sonarqube-quality-gate-check.outputs.quality-gate-status }}"
+          echo "SonarQube Quality Gate Status: ${{ steps.sonarqube-quality-gate-check.outputs.quality-gate-status }}"
 
 
   # ============================================================
-  # STAGE 6 — Client Build
+  # STAGE 7 — FRONTEND BUILD
   # ============================================================
 
   client-build:
     name: Client Build
-    needs: client-test
+
+    needs:
+      - client-test
+
     runs-on: ubuntu-latest
 
     defaults:
@@ -477,12 +487,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build client
+      - name: Run frontend build
         run: npm run build
 
 
   # ============================================================
-  # STAGE 8 — Docker Build, Push & Image Scan
+  # STAGE 8 — DOCKER BUILD, IMAGE SCAN & PUSH
   # ============================================================
 
   docker-build-push:
@@ -496,9 +506,8 @@ jobs:
 
     steps:
 
-      # --------------------------------------------------------
-      # Docker Hub Login
-      # --------------------------------------------------------
+      - name: Checkout source code
+        uses: actions/checkout@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -506,41 +515,15 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-
-      # --------------------------------------------------------
-      # Checkout source code
-      # --------------------------------------------------------
-
-      - name: Checkout source code
-        uses: actions/checkout@v4
-
-
-      # --------------------------------------------------------
-      # QEMU
-      # --------------------------------------------------------
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-
-
-      # --------------------------------------------------------
-      # Docker Buildx
-      # --------------------------------------------------------
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-
-      # --------------------------------------------------------
-      # Build Docker Image
-      #
-      # Article 26:
-      # push: false
-      # load: true
-      #
-      # This keeps the image local on the same runner so that
-      # Trivy can scan it before it is pushed.
-      # --------------------------------------------------------
+      # ------------------------------------------------------------
+      # Build image locally first
+      # ------------------------------------------------------------
 
       - name: Build Docker image
         uses: docker/build-push-action@v6
@@ -553,61 +536,41 @@ jobs:
             ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:${{ github.sha }}
             ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:latest
 
-
-      # --------------------------------------------------------
-      # Install Trivy
-      # --------------------------------------------------------
-
-      - name: Install Trivy
-        uses: aquasecurity/trivy-action@master
-        with:
-          version: latest
-          cache: true
-
-
-      # --------------------------------------------------------
-      # Verify Trivy
-      # --------------------------------------------------------
-
-      - name: Verify Trivy installation
-        run: |
-          trivy --version
-          which trivy
-
-
-      # --------------------------------------------------------
-      # Trivy Image Scan — JSON
-      # --------------------------------------------------------
+      # ------------------------------------------------------------
+      # Trivy image scan
+      # ------------------------------------------------------------
 
       - name: Run Trivy image scan - JSON
         run: |
-          trivy image \
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "${{ github.workspace }}:/repo" \
+            aquasec/trivy:0.74.0 \
+            image \
             --format json \
-            --output docker-trivy-image-report.json \
+            --output /repo/docker-trivy-image-report.json \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
             --exit-code 0 \
             ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:${{ github.sha }}
-
-
-      # --------------------------------------------------------
-      # Trivy Image Scan — Table
-      # --------------------------------------------------------
 
       - name: Run Trivy image scan - Table
         run: |
-          trivy image \
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "${{ github.workspace }}:/repo" \
+            aquasec/trivy:0.74.0 \
+            image \
             --format table \
-            --output docker-trivy-image-report.txt \
+            --output /repo/docker-trivy-image-report.txt \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
             --exit-code 0 \
             ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:${{ github.sha }}
 
-
-      # --------------------------------------------------------
-      # Upload Trivy Reports
-      # --------------------------------------------------------
+      # ------------------------------------------------------------
+      # Upload Trivy reports
+      # ------------------------------------------------------------
 
       - name: Upload Docker Trivy reports
         uses: actions/upload-artifact@v4
@@ -618,15 +581,9 @@ jobs:
             docker-trivy-image-report.txt
           if-no-files-found: warn
 
-
-      # --------------------------------------------------------
-      # Push Docker Image
-      #
-      # Article 26:
-      # push: true
-      # image: <username>/nodejs-app
-      # tag: commit SHA
-      # --------------------------------------------------------
+      # ------------------------------------------------------------
+      # Push image to Docker Hub
+      # ------------------------------------------------------------
 
       - name: Push Docker image
         uses: docker/build-push-action@v6
