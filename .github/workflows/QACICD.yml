@@ -175,31 +175,26 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Install Trivy
-        uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241
-        with:
-          version: v0.68.2
-          cache: true
-
-      - name: Verify Trivy installation
-        run: |
-          trivy --version
-          which trivy
-
       - name: Run Trivy filesystem scan - JSON
         run: |
-          trivy fs ./client \
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            aquasec/trivy:0.74.0 \
+            fs /repo/client \
             --format json \
-            --output client-trivy-fs-report.json \
+            --output /repo/client-trivy-fs-report.json \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
             --exit-code 0
 
       - name: Run Trivy filesystem scan - Table
         run: |
-          trivy fs ./client \
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            aquasec/trivy:0.74.0 \
+            fs /repo/client \
             --format table \
-            --output client-trivy-fs-report.txt \
+            --output /repo/client-trivy-fs-report.txt \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
             --exit-code 0
@@ -207,14 +202,14 @@ jobs:
       - name: Upload Trivy JSON report
         uses: actions/upload-artifact@v4
         with:
-          name: trivy-fs-json-report
+          name: client-trivy-fs-json-report
           path: client-trivy-fs-report.json
           if-no-files-found: warn
 
       - name: Upload Trivy Table report
         uses: actions/upload-artifact@v4
         with:
-          name: trivy-fs-table-report
+          name: client-trivy-fs-table-report
           path: client-trivy-fs-report.txt
           if-no-files-found: warn
 
@@ -233,31 +228,26 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Install Trivy
-        uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241
-        with:
-          version: v0.68.2
-          cache: true
-
-      - name: Verify Trivy installation
-        run: |
-          trivy --version
-          which trivy
-
       - name: Run Trivy filesystem scan - JSON
         run: |
-          trivy fs ./server \
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            aquasec/trivy:0.74.0 \
+            fs /repo/server \
             --format json \
-            --output server-trivy-fs-report.json \
+            --output /repo/server-trivy-fs-report.json \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
             --exit-code 0
 
       - name: Run Trivy filesystem scan - Table
         run: |
-          trivy fs ./server \
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            aquasec/trivy:0.74.0 \
+            fs /repo/server \
             --format table \
-            --output server-trivy-fs-report.txt \
+            --output /repo/server-trivy-fs-report.txt \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
             --exit-code 0
