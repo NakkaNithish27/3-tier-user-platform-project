@@ -1,1 +1,39 @@
+name: CI/CD Pipeline 
 
+on:
+  push:
+    branches:
+      - qa
+    paths:
+      - 'client/**'
+      - 'server/**'
+      - '.github/workflows/**'
+
+jobs:
+  gitleaks_scan:
+    name: GitLeaks scan
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Run GitLeaks scan
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/repo \
+            zricethezav/gitleaks:latest \
+            detect \
+            --source /repo \
+            --report-format json \
+            --report-path /repo/gitleaks-report.json \
+            --redact \
+            --exit-code 0
+
+      - name: Upload GitLeaks report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+          if-no-files-found: warn
