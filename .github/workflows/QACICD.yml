@@ -430,30 +430,16 @@ jobs:
 
     steps:
 
-      # ----------------------------------------------------------
-      # CHECKOUT WITH COMPLETE GIT HISTORY
-      # ----------------------------------------------------------
-
       - name: Checkout source code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-
-      # ----------------------------------------------------------
-      # SONARQUBE CODE ANALYSIS
-      # ----------------------------------------------------------
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@master
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-
-
-      # ----------------------------------------------------------
-      # SONARQUBE QUALITY GATE
-      # ----------------------------------------------------------
 
       - name: SonarQube Quality Gate check
         id: sonarqube-quality-gate-check
@@ -464,11 +450,41 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
-
-      # ----------------------------------------------------------
-      # DISPLAY QUALITY GATE STATUS
-      # ----------------------------------------------------------
-
       - name: Show SonarQube Quality Gate Status
         run: |
           echo "SonarQube Quality Gate Status: ${{ steps.sonarqube-quality-gate-check.outputs.quality-gate-status }}"
+
+
+  # ============================================================
+  # STAGE 7 — FRONTEND BUILD
+  # ============================================================
+
+  client-build:
+    name: client build
+
+    needs:
+      - client-test
+
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run frontend build
+        run: npm run build
