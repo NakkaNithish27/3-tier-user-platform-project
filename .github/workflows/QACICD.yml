@@ -492,11 +492,11 @@ jobs:
 
 
   # ============================================================
-  # STAGE 8 — DOCKER BUILD, IMAGE SCAN & PUSH
+  # STAGE 8 — DOCKER BUILD, SBOM, IMAGE SCAN & PUSH
   # ============================================================
 
   docker-build-push:
-    name: Docker Build and Push
+    name: Docker Build, SBOM, Image Scan and Push
 
     needs:
       - client-build
@@ -535,6 +535,42 @@ jobs:
           tags: |
             ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:${{ github.sha }}
             ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:latest
+
+      # ------------------------------------------------------------
+      # STAGE 9 — SBOM SOURCE
+      # ------------------------------------------------------------
+
+      - name: Generate SBOM for source
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: sbom-source.spdx.json
+
+      - name: Upload source SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-source
+          path: sbom-source.spdx.json
+          if-no-files-found: warn
+
+      # ------------------------------------------------------------
+      # STAGE 9 — SBOM IMAGE
+      # ------------------------------------------------------------
+
+      - name: Generate SBOM for Docker image
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:${{ github.sha }}
+          format: spdx-json
+          output-file: sbom-image.spdx.json
+
+      - name: Upload image SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-image
+          path: sbom-image.spdx.json
+          if-no-files-found: warn
 
       # ------------------------------------------------------------
       # Trivy image scan
