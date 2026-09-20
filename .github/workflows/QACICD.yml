@@ -9,6 +9,9 @@ on:
       - 'server/**'
       - '.github/workflows/**'
 
+permissions:
+  contents: write
+
 jobs:
 
   # ============================================================
@@ -630,3 +633,41 @@ jobs:
           tags: |
             ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:${{ github.sha }}
             ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:latest
+
+
+  # ============================================================
+  # STAGE 10 — UPDATE QA MANIFEST
+  # ============================================================
+
+  update-qa-manifest:
+    name: Update QA image tag
+
+    needs: docker-build-push
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout QA branch
+        uses: actions/checkout@v4
+        with:
+          ref: QA
+
+      - name: Update QA image tag
+        run: |
+          sed -i "s|image: .*|image: ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:${{ github.sha }}|" create-manifest/QA/app-deployment.yaml
+
+      - name: Show updated manifest
+        run: |
+          grep "image:" create-manifest/QA/app-deployment.yaml
+
+      - name: Commit and push manifest
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add create-manifest/QA/app-deployment.yaml
+
+          git commit -m "Update QA image to ${{ github.sha }}" || exit 0
+
+          git push origin QA
