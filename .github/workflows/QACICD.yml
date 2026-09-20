@@ -12,12 +12,6 @@ on:
 # ============================================================
 # WORKFLOW PERMISSIONS
 # ============================================================
-# contents: write  -> allows GitHub Actions to update the
-#                    Kubernetes manifest and push the commit.
-#
-# id-token: write  -> allows GitHub Actions to request the
-#                    OIDC JWT used to authenticate to AWS.
-# ============================================================
 
 permissions:
   contents: write
@@ -649,19 +643,6 @@ jobs:
   # ============================================================
   # STAGE 10 — UPDATE QA IMAGE TAG
   # ============================================================
-  #
-  # This job:
-  # 1. waits for Docker image creation
-  # 2. checks out QA
-  # 3. updates the image tag in the QA manifest
-  # 4. commits the changed manifest
-  # 5. pushes the commit back to QA
-  #
-  # The manifest path is intentionally:
-  # create-manifest/qa/
-  #
-  # because that is the actual path in this project.
-  # ============================================================
 
   update-qa-manifest:
     name: Update QA image tag
@@ -679,11 +660,11 @@ jobs:
 
       - name: Update QA image tag
         run: |
-          sed -i "s|image: .*|image: ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:${{ github.sha }}|" create-manifest/qa/app-deployment.yaml
+          sed -i "s|image: .*|image: ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:${{ github.sha }}|" k8-manifests/qa/app-deployment.yaml
 
       - name: Show updated manifest
         run: |
-          cat create-manifest/qa/app-deployment.yaml
+          cat k8-manifests/qa/app-deployment.yaml
 
       - name: Configure Git
         run: |
@@ -692,41 +673,13 @@ jobs:
 
       - name: Commit and push manifest
         run: |
-          git add create-manifest/qa/app-deployment.yaml
+          git add k8-manifests/qa/app-deployment.yaml
           git commit -m "Update QA image to ${{ github.sha }} [skip ci]" || exit 0
           git push origin QA
 
 
   # ============================================================
   # STAGE 11 — DEPLOY TO EKS
-  # ============================================================
-  #
-  # This is the Article 35 deployment stage.
-  #
-  # Flow:
-  #
-  # update manifest
-  #       ↓
-  # checkout latest QA branch tip
-  #       ↓
-  # GitHub OIDC
-  #       ↓
-  # assume AWS IAM role
-  #       ↓
-  # install kubectl
-  #       ↓
-  # generate kubeconfig
-  #       ↓
-  # verify identity/context
-  #       ↓
-  # inspect QA
-  #       ↓
-  # validate Kubernetes RBAC
-  #       ↓
-  # kubectl apply
-  #       ↓
-  # rollout status
-  #
   # ============================================================
 
   deploy-to-eks:
@@ -744,11 +697,7 @@ jobs:
     steps:
 
       # ------------------------------------------------------------
-      # IMPORTANT:
-      # The previous job created a NEW commit on QA.
-      #
-      # A normal checkout could use the original triggering commit.
-      # Therefore explicitly checkout the current QA branch tip.
+      # Checkout the latest QA branch tip
       # ------------------------------------------------------------
 
       - name: Checkout latest QA branch
@@ -759,7 +708,7 @@ jobs:
           fetch-depth: 0
 
       # ------------------------------------------------------------
-      # AWS OIDC
+      # Configure AWS credentials using GitHub OIDC
       # ------------------------------------------------------------
 
       - name: Configure AWS credentials from GitHub OIDC
@@ -838,7 +787,7 @@ jobs:
       - name: Apply QA Kubernetes manifests
         run: |
           kubectl apply \
-            -f create-manifest/qa \
+            -f k8-manifests/qa \
             -n "$K8S_NAMESPACE"
 
       # ------------------------------------------------------------
