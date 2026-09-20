@@ -1,5 +1,8 @@
 # 3-tier-user-platform-project
 
+<img width="1182" height="1330" alt="image" src="https://github.com/user-attachments/assets/c6671ae1-f126-4cec-8204-c2afb3773394" />
+
+
 ## 1. Development
 
 A developer first receives a requirement and creates a feature branch from the `qa` branch. The developer makes the required changes to the React frontend or Node.js backend and tests the application locally with MySQL.
