@@ -1,0 +1,161 @@
+name: CD Pipeline - PROD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'k8-manifests/prod/app-deployment.yaml'
+      - '.github/workflows/PRODCICD.yml'
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+
+  promote-image:
+    name: Promote QA Image to PROD
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Pull QA image
+        run: |
+          docker pull ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:latest
+
+      - name: Tag image for PROD
+        run: |
+          docker tag \
+            ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:latest \
+            ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:prod-${{ github.sha }}
+
+          docker tag \
+            ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:latest \
+            ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:prod-latest
+
+      - name: Verify PROD image tags
+        run: |
+          docker images | grep nodejs-app
+
+      - name: Push PROD images
+        run: |
+          docker push ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:prod-${{ github.sha }}
+          docker push ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:prod-latest
+
+      - name: Update PROD manifest
+        run: |
+          sed -i "s|image: .*|image: ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:prod-${{ github.sha }}|" \
+            k8-manifests/prod/app-deployment.yaml
+
+      - name: Show updated PROD manifest
+        run: |
+          cat k8-manifests/prod/app-deployment.yaml
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit and push PROD manifest
+        run: |
+          git add k8-manifests/prod/app-deployment.yaml
+          git commit -m "Update PROD image to ${{ github.sha }} [skip ci]" || exit 0
+          git push origin main
+
+
+  deploy-prod:
+    name: Deploy to PROD EKS
+    needs: promote-image
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: us-east-1
+      EKS_CLUSTER_NAME: my-cluster
+      K8S_NAMESPACE: prod
+
+    steps:
+
+      - name: Checkout latest main branch
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure AWS credentials from GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME1 }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: latest
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region "$AWS_REGION" \
+            --name "$EKS_CLUSTER_NAME"
+
+      - name: Verify AWS identity
+        run: |
+          aws sts get-caller-identity
+
+      - name: Verify Kubernetes context
+        run: |
+          kubectl config current-context
+
+      - name: List existing PROD pods
+        run: |
+          kubectl get pods -n "$K8S_NAMESPACE"
+
+      - name: List existing PROD services
+        run: |
+          kubectl get services -n "$K8S_NAMESPACE"
+
+      - name: Validate Deployment permissions
+        run: |
+          kubectl auth can-i create deployments -n "$K8S_NAMESPACE"
+
+      - name: Validate Service permissions
+        run: |
+          kubectl auth can-i create services -n "$K8S_NAMESPACE"
+
+      - name: Validate Ingress permissions
+        run: |
+          kubectl auth can-i create ingresses -n "$K8S_NAMESPACE"
+
+      - name: Apply PROD Kubernetes manifests
+        run: |
+          kubectl apply \
+            -f k8-manifests/prod \
+            -n "$K8S_NAMESPACE"
+
+      - name: Wait for Node.js application rollout
+        run: |
+          kubectl rollout status \
+            deployment/nodejs-app \
+            -n "$K8S_NAMESPACE" \
+            --timeout=5m
+
+      - name: Verify deployed PROD resources
+        run: |
+          kubectl get all -n "$K8S_NAMESPACE"
+
+      - name: Verify PROD ingress
+        run: |
+          kubectl get ingress -n "$K8S_NAMESPACE"
