@@ -9,8 +9,19 @@ on:
       - 'server/**'
       - '.github/workflows/**'
 
+# ============================================================
+# WORKFLOW PERMISSIONS
+# ============================================================
+# contents: write  -> allows GitHub Actions to update the
+#                    Kubernetes manifest and push the commit.
+#
+# id-token: write  -> allows GitHub Actions to request the
+#                    OIDC JWT used to authenticate to AWS.
+# ============================================================
+
 permissions:
   contents: write
+  id-token: write
 
 jobs:
 
@@ -636,7 +647,20 @@ jobs:
 
 
   # ============================================================
-  # STAGE 10 — UPDATE QA MANIFEST
+  # STAGE 10 — UPDATE QA IMAGE TAG
+  # ============================================================
+  #
+  # This job:
+  # 1. waits for Docker image creation
+  # 2. checks out QA
+  # 3. updates the image tag in the QA manifest
+  # 4. commits the changed manifest
+  # 5. pushes the commit back to QA
+  #
+  # The manifest path is intentionally:
+  # create-manifest/qa/
+  #
+  # because that is the actual path in this project.
   # ============================================================
 
   update-qa-manifest:
@@ -655,19 +679,187 @@ jobs:
 
       - name: Update QA image tag
         run: |
-          sed -i "s|image: .*|image: ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:${{ github.sha }}|" k8-manifests/qa/app-deployment.yaml
+          sed -i "s|image: .*|image: ${{ vars.DOCKERHUB_USERNAME }}/nodejs-app:${{ github.sha }}|" create-manifest/qa/app-deployment.yaml
 
       - name: Show updated manifest
         run: |
-          grep "image:" k8-manifests/qa/app-deployment.yaml
+          cat create-manifest/qa/app-deployment.yaml
 
-      - name: Commit and push manifest
+      - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add k8-manifests/qa/app-deployment.yaml
-
-          git commit -m "Update QA image to ${{ github.sha }}" || exit 0
-
+      - name: Commit and push manifest
+        run: |
+          git add create-manifest/qa/app-deployment.yaml
+          git commit -m "Update QA image to ${{ github.sha }} [skip ci]" || exit 0
           git push origin QA
+
+
+  # ============================================================
+  # STAGE 11 — DEPLOY TO EKS
+  # ============================================================
+  #
+  # This is the Article 35 deployment stage.
+  #
+  # Flow:
+  #
+  # update manifest
+  #       ↓
+  # checkout latest QA branch tip
+  #       ↓
+  # GitHub OIDC
+  #       ↓
+  # assume AWS IAM role
+  #       ↓
+  # install kubectl
+  #       ↓
+  # generate kubeconfig
+  #       ↓
+  # verify identity/context
+  #       ↓
+  # inspect QA
+  #       ↓
+  # validate Kubernetes RBAC
+  #       ↓
+  # kubectl apply
+  #       ↓
+  # rollout status
+  #
+  # ============================================================
+
+  deploy-to-eks:
+    name: Deploy QA manifests to EKS
+
+    needs: update-qa-manifest
+
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: us-east-1
+      EKS_CLUSTER_NAME: my-cluster
+      K8S_NAMESPACE: qa
+
+    steps:
+
+      # ------------------------------------------------------------
+      # IMPORTANT:
+      # The previous job created a NEW commit on QA.
+      #
+      # A normal checkout could use the original triggering commit.
+      # Therefore explicitly checkout the current QA branch tip.
+      # ------------------------------------------------------------
+
+      - name: Checkout latest QA branch
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: QA
+          fetch-depth: 0
+
+      # ------------------------------------------------------------
+      # AWS OIDC
+      # ------------------------------------------------------------
+
+      - name: Configure AWS credentials from GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ------------------------------------------------------------
+      # Install kubectl
+      # ------------------------------------------------------------
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: latest
+
+      # ------------------------------------------------------------
+      # Generate kubeconfig
+      # ------------------------------------------------------------
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region "$AWS_REGION" \
+            --name "$EKS_CLUSTER_NAME"
+
+      # ------------------------------------------------------------
+      # Verify AWS identity
+      # ------------------------------------------------------------
+
+      - name: Verify AWS identity
+        run: |
+          aws sts get-caller-identity
+
+      # ------------------------------------------------------------
+      # Verify Kubernetes context
+      # ------------------------------------------------------------
+
+      - name: Verify Kubernetes context
+        run: |
+          kubectl config current-context
+
+      # ------------------------------------------------------------
+      # Inspect current QA state
+      # ------------------------------------------------------------
+
+      - name: List existing QA pods
+        run: |
+          kubectl get pods -n "$K8S_NAMESPACE"
+
+      - name: List existing QA services
+        run: |
+          kubectl get services -n "$K8S_NAMESPACE"
+
+      # ------------------------------------------------------------
+      # Kubernetes RBAC pre-flight checks
+      # ------------------------------------------------------------
+
+      - name: Validate Deployment permissions
+        run: |
+          kubectl auth can-i create deployments -n "$K8S_NAMESPACE"
+
+      - name: Validate Service permissions
+        run: |
+          kubectl auth can-i create services -n "$K8S_NAMESPACE"
+
+      - name: Validate Ingress permissions
+        run: |
+          kubectl auth can-i create ingresses -n "$K8S_NAMESPACE"
+
+      # ------------------------------------------------------------
+      # Apply QA manifests
+      # ------------------------------------------------------------
+
+      - name: Apply QA Kubernetes manifests
+        run: |
+          kubectl apply \
+            -f create-manifest/qa \
+            -n "$K8S_NAMESPACE"
+
+      # ------------------------------------------------------------
+      # Wait for application rollout
+      # ------------------------------------------------------------
+
+      - name: Wait for Node.js application rollout
+        run: |
+          kubectl rollout status \
+            deployment/nodejs-app \
+            -n "$K8S_NAMESPACE" \
+            --timeout=5m
+
+      # ------------------------------------------------------------
+      # Final cluster verification
+      # ------------------------------------------------------------
+
+      - name: Verify deployed resources
+        run: |
+          kubectl get all -n "$K8S_NAMESPACE"
+
+      - name: Verify ingress
+        run: |
+          kubectl get ingress -n "$K8S_NAMESPACE"
