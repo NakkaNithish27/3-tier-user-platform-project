@@ -10,7 +10,7 @@ The platform also implements secure AWS authentication using GitHub OIDC and IAM
 
 <img width="1182" height="1330" alt="image" src="https://github.com/user-attachments/assets/c6671ae1-f126-4cec-8204-c2afb3773394" />
 
-### The following workflow describes how a code change moves through the complete system from development to production.
+The following workflow describes how a code change moves through the complete system from development to production.
 
 ## 1. Development
 
