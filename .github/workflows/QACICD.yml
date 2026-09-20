@@ -12,6 +12,7 @@ on:
 # ============================================================
 # WORKFLOW PERMISSIONS
 # ============================================================
+# making a demo change to trigger the QA Pipeline
 
 permissions:
   contents: write
