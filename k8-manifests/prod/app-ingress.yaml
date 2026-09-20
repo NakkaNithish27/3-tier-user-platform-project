@@ -8,11 +8,11 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
     alb.ingress.kubernetes.io/ssl-redirect: '443'
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:445529239514:certificate/ec899846-15fe-42db-9666-35f5e36afe45
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:445529239514:certificate/a2f88ffa-59da-432e-a813-993bdc3d5278
 spec:
   ingressClassName: alb
   rules:
-    - host: myeksproject123.website
+    - host: prod.myeksproject123.website
       http:
         paths:
           - path: /
