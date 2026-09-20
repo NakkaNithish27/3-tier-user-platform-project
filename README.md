@@ -1,7 +1,16 @@
 # 3-tier-user-platform-project
 
+## Project Overview
+
+This project demonstrates the design and implementation of a production-style DevOps platform for a 3-tier web application consisting of a React frontend, Node.js backend, and MySQL database. The project covers the complete software delivery lifecycle, from developer changes and code review through automated CI/CD, security and quality gates, containerization, Kubernetes deployment, QA validation, and production promotion.
+
+The application runs on Amazon EKS with separate QA and Production environments. GitHub Actions automates the CI/CD process, while GitLeaks, Checkov, Trivy, SonarQube, and SBOM generation provide security and code-quality checks before deployment. Docker images are built with immutable commit-SHA tags and promoted from QA to Production without rebuilding the application.
+
+The platform also implements secure AWS authentication using GitHub OIDC and IAM roles, persistent MySQL storage using Amazon EBS, external secret management through AWS Secrets Manager and External Secrets Operator, and external application access through AWS Load Balancer Controller, Route 53, and ACM. Prometheus, Loki, Grafana Alloy, and Grafana provide monitoring, logging, and operational visibility across the deployed environment.
+
 <img width="1182" height="1330" alt="image" src="https://github.com/user-attachments/assets/c6671ae1-f126-4cec-8204-c2afb3773394" />
 
+The following workflow describes how a code change moves through the complete system from development to production.
 
 ## 1. Development
 
